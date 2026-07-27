@@ -245,4 +245,28 @@ describe("buildChatModelGroups", () => {
       },
     ]);
   });
+
+  it("keeps a custom current OpenRouter model beside its curated models", () => {
+    const groups = buildChatModelGroups({
+      currentEngineName: "ai-sdk:openrouter",
+      currentModel: "deepseek/deepseek-v4-flash",
+      engines: [
+        {
+          name: "ai-sdk:openrouter",
+          label: "OpenRouter",
+          supportedModels: ["z-ai/glm-5.2"],
+          requiredEnvVars: ["OPENROUTER_API_KEY"],
+        },
+      ],
+    });
+
+    expect(groups).toEqual([
+      {
+        engine: "ai-sdk:openrouter",
+        label: "OpenRouter",
+        models: ["deepseek/deepseek-v4-flash", "z-ai/glm-5.2"],
+        configured: false,
+      },
+    ]);
+  });
 });

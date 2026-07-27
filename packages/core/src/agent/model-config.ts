@@ -303,6 +303,7 @@ export const AGENT_MODEL_CONFIG = {
         OPENROUTER_CLAUDE_SONNET_MODEL_ID,
         "anthropic/claude-opus-4.8",
         "anthropic/claude-fable-5",
+        "deepseek/deepseek-v4-flash",
         // Current stable Gemini on OpenRouter (2.5 Flash is GA)
         "google/gemini-2.5-flash",
         "z-ai/glm-5.2",

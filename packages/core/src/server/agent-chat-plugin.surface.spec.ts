@@ -160,6 +160,16 @@ describe("interactive agent run options — wiring guards", () => {
     );
     expect(source).not.toContain("backgroundRunDone");
   });
+
+  it("mounts frontend actions with the resolved session organization", () => {
+    const source = readFileSync("src/server/agent-chat-plugin.ts", {
+      encoding: "utf-8",
+    });
+
+    expect(source).toMatch(
+      /mountActionRoutes\(nitroApp, httpActions, \{\s*getOwnerFromEvent,\s*getUserNameFromEvent,\s*resolveOrgId: async \(event\) =>\s*\(await getOrgIdFromEvent\(event\)\) \?\? null,/,
+    );
+  });
 });
 
 describe("agent teams prompt guidance", () => {

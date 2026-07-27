@@ -34,7 +34,12 @@ function addCurrentModel(
   currentModel?: string,
 ): string[] {
   const next = [...models];
-  if (engineName === currentEngineName && currentModel && next.length === 0) {
+  if (
+    engineName === currentEngineName &&
+    currentModel &&
+    !next.includes(currentModel) &&
+    (next.length === 0 || engineName === "ai-sdk:openrouter")
+  ) {
     next.unshift(currentModel);
   }
   return next;

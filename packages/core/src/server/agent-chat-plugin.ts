@@ -2203,7 +2203,8 @@ export function createAgentChatPlugin(
         mountActionRoutes(nitroApp, httpActions, {
           getOwnerFromEvent,
           getUserNameFromEvent,
-          resolveOrgId: options?.resolveOrgId,
+          resolveOrgId: async (event) =>
+            (await getOrgIdFromEvent(event)) ?? null,
           actionRouteAuth: options?.actionRouteAuth,
         });
       }

@@ -36,6 +36,8 @@ const VISIBLE_GPT_EFFORTS: ReasoningEffort[] = [
   "xhigh",
 ];
 
+const VISIBLE_DEEPSEEK_V4_EFFORTS: ReasoningEffort[] = ["high", "xhigh"];
+
 const VISIBLE_CLAUDE_BUILT_IN_EFFORTS: ReasoningEffort[] = [
   ...VISIBLE_STANDARD_EFFORTS,
   "xhigh",
@@ -60,6 +62,9 @@ export function getReasoningEffortOptionsForModel(
   if (isGPTReasoningModel(model)) {
     return VISIBLE_GPT_EFFORTS;
   }
+  if (isDeepSeekV4ReasoningModel(model)) {
+    return VISIBLE_DEEPSEEK_V4_EFFORTS;
+  }
   if (isClaudeReasoningModel(model)) {
     return supportsClaudeXHigh(model)
       ? VISIBLE_CLAUDE_BUILT_IN_EFFORTS
@@ -77,7 +82,9 @@ export function normalizeReasoningEffortForModel(
 ): ReasoningEffort | undefined {
   if (!model) return undefined;
   let normalized =
-    !effort || effort === "auto" ? DEFAULT_REASONING_EFFORT : effort;
+    !effort || effort === "auto"
+      ? defaultReasoningEffortForModel(model)
+      : effort;
   if (
     normalized === "xhigh" &&
     isClaudeReasoningModel(model) &&
@@ -116,21 +123,21 @@ export function reasoningEffortLabel(effort: ReasoningEffort | undefined) {
 
 /**
  * Resolve a user-facing selection for a model. Legacy `auto`, missing values,
- * and tiers unsupported by the newly selected model all become Medium.
- * Non-reasoning models still retain Medium in persisted chat state so moving
- * back to a reasoning model has a predictable default; their engines omit the
- * effort through `normalizeReasoningEffortForModel`.
+ * and tiers unsupported by the newly selected model become that model's
+ * default. Non-reasoning models still retain Medium in persisted chat state so
+ * moving back to a reasoning model has a predictable default; their engines
+ * omit the effort through `normalizeReasoningEffortForModel`.
  */
 export function resolveReasoningEffortSelection(
   model: string | undefined,
   effort: ReasoningEffort | undefined,
 ): ReasoningEffort {
-  const requested =
-    !effort || effort === "auto" ? DEFAULT_REASONING_EFFORT : effort;
+  const defaultEffort = defaultReasoningEffortForModel(model);
+  const requested = !effort || effort === "auto" ? defaultEffort : effort;
   const options = getReasoningEffortOptionsForModel(model);
   return options.length === 0 || options.includes(requested)
     ? requested
-    : DEFAULT_REASONING_EFFORT;
+    : defaultEffort;
 }
 
 /**
@@ -159,6 +166,19 @@ export function stepDownReasoningEffort(
 function isGPTReasoningModel(model: string) {
   const id = model.toLowerCase().replace(/^openai\//, "");
   return /^gpt-5/.test(id) || /^o\d/.test(id);
+}
+
+function isDeepSeekV4ReasoningModel(model: string) {
+  const id = model.toLowerCase().replace(/^deepseek\//, "");
+  return /^deepseek-v4(?:-|$)/.test(id);
+}
+
+function defaultReasoningEffortForModel(
+  model: string | undefined,
+): ReasoningEffort {
+  return model && isDeepSeekV4ReasoningModel(model)
+    ? "high"
+    : DEFAULT_REASONING_EFFORT;
 }
 
 function isClaudeReasoningModel(model: string) {

@@ -41,6 +41,15 @@ describe("supportsClaudeXHigh (via getReasoningEffortOptionsForModel)", () => {
     ).toContain("medium");
   });
 
+  it("uses the OpenRouter-supported effort ladder for DeepSeek V4", () => {
+    expect(
+      getReasoningEffortOptionsForModel("deepseek/deepseek-v4-flash"),
+    ).toEqual(["high", "xhigh"]);
+    expect(
+      resolveReasoningEffortSelection("deepseek/deepseek-v4-flash", undefined),
+    ).toBe("high");
+  });
+
   it("includes xhigh for claude-fable-5 (Mythos-class model)", () => {
     const opts = getReasoningEffortOptionsForModel("claude-fable-5");
     expect(opts).toContain("xhigh");
@@ -85,6 +94,15 @@ describe("normalizeReasoningEffortForModel", () => {
     expect(normalizeReasoningEffortForModel("claude-sonnet-5", "xhigh")).toBe(
       "xhigh",
     );
+  });
+
+  it("defaults DeepSeek V4 to high and preserves xhigh", () => {
+    expect(
+      normalizeReasoningEffortForModel("deepseek/deepseek-v4-flash", undefined),
+    ).toBe("high");
+    expect(
+      normalizeReasoningEffortForModel("deepseek/deepseek-v4-flash", "xhigh"),
+    ).toBe("xhigh");
   });
 
   it("normalizes legacy auto and missing effort to medium", () => {

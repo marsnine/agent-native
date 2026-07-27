@@ -18,7 +18,11 @@ describe("OpenRouter builtin engine", () => {
     expect(entry?.requiredEnvVars).toEqual(["OPENROUTER_API_KEY"]);
     expect(entry?.defaultModel).toBe("openai/gpt-5.6-luna");
     expect(entry?.supportedModels).toEqual(
-      expect.arrayContaining(["openai/gpt-5.6-luna", "z-ai/glm-5.2"]),
+      expect.arrayContaining([
+        "openai/gpt-5.6-luna",
+        "deepseek/deepseek-v4-flash",
+        "z-ai/glm-5.2",
+      ]),
     );
     expect(entry?.installPackage).toContain("@openrouter/ai-sdk-provider");
   });
@@ -156,6 +160,45 @@ describe("OpenRouter builtin engine", () => {
 
     expect(streamText).toHaveBeenCalledWith(
       expect.objectContaining({ maxOutputTokens: 333 }),
+    );
+  });
+
+  it("sends high reasoning by default for DeepSeek V4 Flash", async () => {
+    const streamText = vi.fn().mockReturnValue({
+      fullStream: (async function* () {
+        yield { type: "finish", finishReason: "stop", usage: {} };
+      })(),
+    });
+    vi.doMock("ai", () => ({ streamText, jsonSchema: (s: unknown) => s }));
+
+    const openrouter = vi.fn().mockReturnValue({});
+    vi.doMock("@openrouter/ai-sdk-provider", () => ({
+      createOpenRouter: vi.fn().mockReturnValue(openrouter),
+    }));
+
+    const { createAISDKEngine } = await import("./ai-sdk-engine.js");
+    const engine = createAISDKEngine("openrouter", {
+      apiKey: "or-test-key",
+    });
+
+    for await (const _ of engine.stream({
+      model: "deepseek/deepseek-v4-flash",
+      systemPrompt: "",
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      tools: [],
+      abortSignal: new AbortController().signal,
+    } as any)) {
+      void _;
+    }
+
+    expect(streamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOptions: {
+          openrouter: {
+            reasoning: { effort: "high" },
+          },
+        },
+      }),
     );
   });
 });
