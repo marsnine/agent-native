@@ -34,9 +34,30 @@ private final class ComputerHelper {
         case "releaseAll":
             releaseAllInputs()
             return nil
+        case "diagnose":
+            return diagnose()
         default:
             throw HelperFailure(description: "Unsupported command.")
         }
+    }
+
+    /// Diagnostic-only: reports whether THIS helper process is TCC-trusted for
+    /// Accessibility, independent of any focused window. Used to distinguish an
+    /// untrusted-process failure from a genuine "no focused app" condition.
+    private func diagnose() -> [String: Any] {
+        let trusted = AXIsProcessTrusted()
+        var result: [String: Any] = [
+            "axProcessTrusted": trusted,
+            "pid": ProcessInfo.processInfo.processIdentifier,
+        ]
+        if let front = NSWorkspace.shared.frontmostApplication {
+            result["frontmostBundleId"] = front.bundleIdentifier ?? ""
+            result["frontmostName"] = front.localizedName ?? ""
+        }
+        let system = AXUIElementCreateSystemWide()
+        let focusedApp = copyElement(system, kAXFocusedApplicationAttribute as CFString)
+        result["focusedApplicationAvailable"] = (focusedApp != nil)
+        return result
     }
 
     private func takeSnapshot() throws -> [String: Any] {
@@ -228,9 +249,25 @@ private final class ComputerHelper {
     }
 
     private func focusedContext() throws -> (application: AXUIElement, bundleId: String, applicationName: String?, origin: String?) {
+        // Prefer the frontmost application reported by NSWorkspace and build its AX
+        // element directly from the PID. The system-wide kAXFocusedApplicationAttribute
+        // query can return nil even for a TCC-trusted helper process when an app is
+        // genuinely frontmost (observed: axProcessTrusted=true yet nil focused app).
+        // AXUIElementCreateApplication(pid) does not depend on that global focus slot.
+        if let running = NSWorkspace.shared.frontmostApplication,
+           let bundleId = running.bundleIdentifier {
+            let application = AXUIElementCreateApplication(running.processIdentifier)
+            return (application, bundleId, running.localizedName, originForApplication(application))
+        }
+
+        // Fallback: system-wide focused application.
         let system = AXUIElementCreateSystemWide()
         guard let application = copyElement(system, kAXFocusedApplicationAttribute as CFString) else {
-            throw HelperFailure(description: "No focused application is available.")
+            let trusted = AXIsProcessTrusted()
+            throw HelperFailure(
+                description:
+                    "No focused application is available. (axProcessTrusted=\(trusted))"
+            )
         }
         var pid: pid_t = 0
         guard AXUIElementGetPid(application, &pid) == .success,
