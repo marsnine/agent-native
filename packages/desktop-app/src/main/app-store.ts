@@ -414,7 +414,13 @@ export function applyCodeAgentProviderCredentialsToEnv(): CodeAgentProviderCrede
   const appliedKeys: CodeAgentProviderCredentialKey[] = [];
   const failedKeys: CodeAgentProviderCredentialKey[] = [];
   for (const key of CODE_AGENT_PROVIDER_KEYS) {
-    if (credentials[key]) {
+    const value = credentials[key];
+    if (value) {
+      // Actually inject the decrypted secret into the running process env so the
+      // provider gate (which reads process.env) sees a Settings-saved key. Without
+      // this the function only *reported* applied keys and never applied them,
+      // leaving Finder-launched apps permanently unable to start a coding chat.
+      process.env[key] = value;
       appliedKeys.push(key);
     } else if (hasStoredProviderSecretBlob(store.credentials[key])) {
       failedKeys.push(key);

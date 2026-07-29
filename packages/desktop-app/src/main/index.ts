@@ -7123,7 +7123,6 @@ function ensureCodeAgentLlmProvider(): {
   }
   if (hasRuntimeCodeAgentLlmProvider()) return { ok: true };
 
-  if (hasRuntimeCodeAgentLlmProvider()) return { ok: true };
   const applyResult = AppStore.applyCodeAgentProviderCredentialsToEnv();
   if (applyResult.failedKeys.length > 0) {
     return {
@@ -7132,6 +7131,10 @@ function ensureCodeAgentLlmProvider(): {
         "Agent Native could not read the saved code provider keys. Reconnect the provider in Settings.",
     };
   }
+  // Saved provider keys were just applied to process.env; re-check so a key
+  // connected via Settings is honored immediately, without relaunching with the
+  // env var pre-set.
+  if (hasRuntimeCodeAgentLlmProvider()) return { ok: true };
   return {
     ok: false,
     error:

@@ -22,6 +22,7 @@ vi.mock("electron", () => ({
 }));
 
 import {
+  applyCodeAgentProviderCredentialsToEnv,
   getCodeAgentProviderSettingsStatus,
   loadCodeAgentProviderCredentials,
   loadRemoteConnectorSettings,
@@ -69,5 +70,32 @@ describe("desktop privacy-safe status reads", () => {
 
   it("defaults the background connector to disabled", () => {
     expect(loadRemoteConnectorSettings()).toEqual({ enabled: false });
+  });
+
+  it("injects a decrypted saved key into process.env so the provider gate passes", () => {
+    const previous = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    fs.writeFileSync(
+      path.join(electronState.userData, "code-agent-providers.json"),
+      JSON.stringify({
+        version: 1,
+        credentials: {
+          ANTHROPIC_API_KEY: { encoding: "safeStorage-v1", value: "ZmFrZQ==" },
+        },
+      }),
+    );
+
+    try {
+      const result = applyCodeAgentProviderCredentialsToEnv();
+
+      // Regression: apply must actually mutate process.env, not merely report it.
+      expect(process.env.ANTHROPIC_API_KEY).toBe("sk-test-example");
+      expect(result.ok).toBe(true);
+      expect(result.appliedKeys).toContain("ANTHROPIC_API_KEY");
+      expect(result.failedKeys).toEqual([]);
+    } finally {
+      if (previous === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = previous;
+    }
   });
 });

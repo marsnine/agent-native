@@ -154,6 +154,28 @@ describe("desktop passive-access regressions", () => {
     expect(main).toContain("applyResult.failedKeys.length > 0");
   });
 
+  it("re-checks the runtime provider after applying saved keys to env", () => {
+    const main = source("./index.ts");
+    const gate = between(
+      main,
+      "function ensureCodeAgentLlmProvider(",
+      "function getLocalCodexCliStatus(",
+    );
+
+    // Applying saved keys mutates process.env; the gate must re-check afterwards
+    // so a Settings-connected key is honored without a relaunch. Regression: the
+    // gate previously fell straight through to failure after apply.
+    const applyIndex = gate.indexOf(
+      "applyCodeAgentProviderCredentialsToEnv()",
+    );
+    const recheckIndex = gate.indexOf(
+      "hasRuntimeCodeAgentLlmProvider()",
+      applyIndex,
+    );
+    expect(applyIndex).toBeGreaterThanOrEqual(0);
+    expect(recheckIndex).toBeGreaterThan(applyIndex);
+  });
+
   it("only marks the local Codex provider configured after authentication", () => {
     const main = source("./index.ts");
     const providerStatus = between(
