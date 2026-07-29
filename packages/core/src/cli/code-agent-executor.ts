@@ -579,6 +579,23 @@ async function executeCodexCliRun(options: {
   );
   const outputPath = path.join(outputDir, "last-message.txt");
   const model = normalizeCodexCliModel(options.model);
+  // The desktop process wires up a per-run computer-use bridge by exporting the
+  // loopback MCP URL + bearer token into this runner's environment.
+  const computerMcpUrl =
+    process.env.AGENT_NATIVE_DESKTOP_COMPUTER_MCP_URL?.trim();
+  const computerMcpToken =
+    process.env.AGENT_NATIVE_DESKTOP_COMPUTER_MCP_TOKEN?.trim();
+  const desktopComputerUse = Boolean(computerMcpUrl && computerMcpToken);
+  // A computer-use run has to launch and drive desktop apps. Under Codex's
+  // Seatbelt sandbox (read-only/workspace-write) macOS SIGKILLs a system app
+  // like Calculator on launch ("Launch Constraint Violation / Code Signature
+  // Invalid"). The in-process engines run their shell unsandboxed and open apps
+  // fine; match that with full-access so Codex can too. The elevated access is
+  // consistent with the user having enabled full desktop Computer access for
+  // this run.
+  const sandbox = desktopComputerUse
+    ? "danger-full-access"
+    : codexSandboxForPermissionMode(options.permissionMode);
   const args = [
     "--ask-for-approval",
     "never",
@@ -589,10 +606,32 @@ async function executeCodexCliRun(options: {
     "never",
     "--skip-git-repo-check",
     "--sandbox",
-    codexSandboxForPermissionMode(options.permissionMode),
+    sandbox,
     "--output-last-message",
     outputPath,
   ];
+  // Expose the computer-use bridge to Codex as a streamable-HTTP MCP server so a
+  // ChatGPT-subscription Codex run drives the desktop through the same native
+  // helper the in-process engines use — instead of the disabled @oai/sky client,
+  // which needs an interactive per-app approval that can never appear under
+  // `--ask-for-approval never`. The bearer is passed by env var (never on the
+  // command line); the per-run loopback URL + token come from
+  // desktopComputerChildEnv.
+  if (desktopComputerUse) {
+    const serverKey = "mcp_servers.agent-native-desktop-computer";
+    // Ignore the user's config.toml so competing computer-use MCP servers — the
+    // ChatGPT app's `node_repl` CUA and the `@oai/sky` client — are not loaded.
+    // Left in, Codex prefers its own built-in automation (which needs the
+    // interactive per-app approval we're avoiding) and never touches our helper.
+    // ChatGPT-subscription auth still comes from CODEX_HOME, not config.toml.
+    args.push("--ignore-user-config");
+    args.push(
+      "-c",
+      `${serverKey}.url=${JSON.stringify(computerMcpUrl)}`,
+      "-c",
+      `${serverKey}.bearer_token_env_var="AGENT_NATIVE_DESKTOP_COMPUTER_MCP_TOKEN"`,
+    );
+  }
   if (model) args.push("--model", model);
   args.push("-");
 

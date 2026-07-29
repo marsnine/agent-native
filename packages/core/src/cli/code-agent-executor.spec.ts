@@ -214,6 +214,73 @@ describe("executeCodeAgentRun", () => {
     );
   });
 
+  it("injects the desktop computer-use MCP server into the Codex run when the bridge is active", async () => {
+    const root = useTempCodeAgentsHome();
+    for (const key of providerEnvKeys) delete process.env[key];
+    const binDir = path.join(root, "bin");
+    const argsPath = path.join(root, "codex-args.json");
+    fs.mkdirSync(binDir, { recursive: true });
+    const codexBin = path.join(binDir, "codex");
+    fs.writeFileSync(
+      codexBin,
+      [
+        "#!/usr/bin/env node",
+        "const fs = require('fs');",
+        "const args = process.argv.slice(2);",
+        `fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));`,
+        "const outIndex = args.indexOf('--output-last-message');",
+        "const outPath = outIndex === -1 ? '' : args[outIndex + 1];",
+        "process.stdin.on('data', () => {});",
+        "process.stdin.on('end', () => {",
+        "  if (outPath) fs.writeFileSync(outPath, 'Codex final answer');",
+        "  process.stdout.write('Codex streamed output');",
+        "});",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    process.env.PATH = `${binDir}${path.delimiter}${originalPath ?? ""}`;
+    process.env.AGENT_NATIVE_DESKTOP_COMPUTER_MCP_URL =
+      "http://127.0.0.1:51234/mcp";
+    process.env.AGENT_NATIVE_DESKTOP_COMPUTER_MCP_TOKEN = "a".repeat(40);
+
+    try {
+      const run = createCodeAgentRunRecord({
+        goalId: "task",
+        title: "Use Codex with desktop",
+        status: "queued",
+        cwd: process.cwd(),
+        metadata: { engine: "codex-cli", model: "codex-cli" },
+      });
+
+      await executeCodeAgentRun({
+        runId: run.id,
+        prompt: "open the calculator",
+        stdout: createStringOutput().stream,
+      });
+
+      const args = JSON.parse(fs.readFileSync(argsPath, "utf-8")) as string[];
+      // The server must be exposed as a streamable-HTTP MCP with the bearer read
+      // from an env var (never inlined on the command line).
+      expect(args).toContain(
+        'mcp_servers.agent-native-desktop-computer.url="http://127.0.0.1:51234/mcp"',
+      );
+      expect(args).toContain(
+        'mcp_servers.agent-native-desktop-computer.bearer_token_env_var="AGENT_NATIVE_DESKTOP_COMPUTER_MCP_TOKEN"',
+      );
+      // Competing user-config computer-use servers (ChatGPT node_repl / @oai/sky)
+      // must be excluded so Codex uses our helper, not its built-in automation.
+      expect(args).toContain("--ignore-user-config");
+      // The sandbox must be relaxed so Codex can launch system apps (Seatbelt
+      // otherwise SIGKILLs them on launch).
+      const sandboxIndex = args.indexOf("--sandbox");
+      expect(args[sandboxIndex + 1]).toBe("danger-full-access");
+      expect(args.join(" ")).not.toContain("a".repeat(40));
+    } finally {
+      delete process.env.AGENT_NATIVE_DESKTOP_COMPUTER_MCP_URL;
+      delete process.env.AGENT_NATIVE_DESKTOP_COMPUTER_MCP_TOKEN;
+    }
+  });
+
   it("routes AGENT_ENGINE=codex-cli to the Codex CLI runner without engine metadata", async () => {
     const root = useTempCodeAgentsHome();
     for (const key of providerEnvKeys) delete process.env[key];
