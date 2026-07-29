@@ -107,3 +107,26 @@ PR: 위 2-1~2-3 패치 + 테스트를 그대로 제출.
 ## 4. 남은 항목 — 키 입력(mutate) 로버스트니스 (진행 중)
 
 관측(AX 읽기)은 픽스로 안정화됐으나, 조사자 CU 점유 상태의 실행에서 **키 입력이 일부만 등록**("display shows 7")되어 에이전트가 AppleScript 폴백으로 56 완성. 가설: CU 동시 점유가 헬퍼 CGEvent 주입과 충돌. **무간섭(조사자 CU 미점유) 실행으로 재확인** 예정 — 결과는 본 문서 갱신.
+
+---
+
+## 5. 멀티 모델 computer-use 확장 (Gemini · ChatGPT 구독)
+
+### 5-1. Gemini (`ai-sdk:google`) — engine 게이트 버그
+- **증상**: Gemini 선택 시 즉시 `Engine "ai-sdk:google" requires optional packages that are not installed in this app` → run 실패.
+- **원인**: `@ai-sdk/google`는 `noExternal` 러너 번들(app.asar)에 인라인돼 있으나, `registry.ts`의 `isBundledServerlessRuntime()`가 **패키징 Electron을 번들 런타임으로 인식 못 해** `require.resolve` 실패를 "미설치"로 오판(Vercel/Netlify만 인식). 실제 동적 `import()`는 작동.
+- **수정**(`packages/core/src/agent/engine/registry.ts`): `ELECTRON_RUN_AS_NODE=1` 또는 `app.asar` 모듈 경로를 번들 런타임으로 인정. 유닛 테스트 추가(`registry.spec.ts`).
+- **결과**: ✅ Gemini 3.5 Flash 단일턴 computer-use 실증 — 계산기 100×200=20,000 실제 제어·판독.
+- **남은 이슈(후속)**: **멀티턴** 대화에서 `AI_APICallError: function call turn comes immediately after a user/function response turn`. Gemini의 엄격한 contents 순서 규칙을 `translate-ai-sdk.ts`가 정규화하지 않음(shared 코드). 우회: 명령마다 새 채팅. 근본 수정은 별도 작업.
+
+### 5-2. ChatGPT 구독 (Codex CLI) — 3-요소 수정
+- **증상**: Codex 런은 "Calculator control wasn't approved by the macOS automation environment"로 데스크탑 제어 실패.
+- **원인 & 수정**(`packages/core/src/cli/code-agent-executor.ts` `executeCodexCliRun`):
+  1. Codex는 데스크탑 MCP를 안 받음 → `codex exec`에 `-c mcp_servers.agent-native-desktop-computer.url/bearer_token_env_var`로 **우리 18-tool 스트리머블-HTTP MCP 주입**(per-run loopback URL+bearer, env 경유).
+  2. 사용자 `~/.codex/config.toml`의 경쟁 CUA(`node_repl`, `@oai/sky`)가 우리 MCP를 가림 → **`--ignore-user-config`**로 배제(auth는 CODEX_HOME 유지).
+  3. Codex Seatbelt 샌드박스(`workspace-write`)가 시스템앱 실행을 macOS Launch Constraint로 SIGKILL → computer-use 런은 **`danger-full-access`**(비샌드박스, 인프로세스 엔진과 동일). computer-use 런에 한정.
+- **결과**: ✅ **end-to-end 실증** — ChatGPT 구독 Codex가 우리 MCP(`computer_observe`/`computer_operation`)로 계산기 열고(크래시 0) 7×8 입력·판독 → "The Calculator display shows 56". 유닛 테스트 추가.
+- 커밋(fork 브랜치 `fix/computer-use-provider-gate-and-ax-focus`): provider-gate / AX-focus / ai-sdk-asar-gate / codex-mcp-injection.
+
+### 공통 남은 항목
+- **키 입력(mutate) 로버스트니스**: 조사자 CU 동시 점유 시 클릭/키 일부 유실 정황(모델 무관). 무간섭 실행 권장.
