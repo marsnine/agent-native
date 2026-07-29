@@ -145,6 +145,36 @@ describe("AgentEngine registry", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("does not reject an unresolvable provider package inside a packaged Electron bundle", async () => {
+    // Packaged Electron runs the code-agent-runner with ELECTRON_RUN_AS_NODE=1
+    // and inlines provider peers into app.asar, so require.resolve misses even
+    // though the engine's dynamic import() loads them. The install gate must
+    // treat that as available and let the import be the real gate — otherwise
+    // ai-sdk:google/openai are wrongly rejected and Gemini/OpenAI never run.
+    vi.stubEnv("ELECTRON_RUN_AS_NODE", "1");
+    const { registerAgentEngine, resolveEngine } =
+      await import("./registry.js");
+    const fakeEngine = { name: "ai-sdk:google", stream: vi.fn() } as any;
+    const create = vi.fn(() => fakeEngine);
+
+    registerAgentEngine({
+      name: "ai-sdk:google",
+      label: "Gemini",
+      description: "",
+      installPackage: "@agent-native/definitely-missing-ai-provider",
+      capabilities: {} as any,
+      defaultModel: "gemini-3-pro",
+      supportedModels: [],
+      requiredEnvVars: [],
+      create,
+    });
+
+    await expect(
+      resolveEngine({ engineOption: "ai-sdk:google" }),
+    ).resolves.toBe(fakeEngine);
+    expect(create).toHaveBeenCalled();
+  });
+
   it("resolveEngine rejects explicit object engines whose optional runtime packages are missing", async () => {
     const { registerAgentEngine, resolveEngine } =
       await import("./registry.js");

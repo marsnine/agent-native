@@ -117,14 +117,23 @@ function isBundledServerlessRuntime(): boolean {
   // Nitro's Vercel/Netlify presets inline optional peers into the function
   // bundle; these platforms always set these markers.
   if (env.VERCEL || env.NETLIFY) return true;
+  // agent-native's packaged Electron desktop app runs the code-agent-runner as
+  // the Electron binary with ELECTRON_RUN_AS_NODE=1, and the runner bundle
+  // inlines optional provider peers (vite `noExternal`) into app.asar. There
+  // require.resolve cannot find a bundled peer even though the engine's dynamic
+  // import() loads it — the same situation as the Nitro presets. In dev the
+  // peers sit in a real node_modules, so require.resolve succeeds and this
+  // fallback is never reached; this only masks the miss inside the asar bundle.
+  if (env.ELECTRON_RUN_AS_NODE === "1") return true;
   // Otherwise require direct evidence that this module is running from inside a
   // bundle output directory (Vercel's `/var/task`, Nitro's `.output/server`,
-  // inlined `_libs`). This is the real signal that `require.resolve` cannot be
-  // trusted; it stays false for normal `node_modules` layouts (dev, tests, and
-  // container/Lambda/Cloud Run deploys that ship their dependencies), so a
-  // genuine "package not installed" miss still surfaces there.
+  // inlined `_libs`, or an Electron `app.asar`). This is the real signal that
+  // `require.resolve` cannot be trusted; it stays false for normal
+  // `node_modules` layouts (dev, tests, and container/Lambda/Cloud Run deploys
+  // that ship their dependencies), so a genuine "package not installed" miss
+  // still surfaces there.
   try {
-    return /[\\/](?:_libs|\.vercel|\.netlify|\.output)[\\/]|\/var\/task\//.test(
+    return /[\\/](?:_libs|\.vercel|\.netlify|\.output|app\.asar)[\\/]|\/var\/task\//.test(
       import.meta.url ?? "",
     );
   } catch {
