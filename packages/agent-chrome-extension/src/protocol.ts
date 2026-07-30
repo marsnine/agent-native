@@ -22,6 +22,7 @@ export type BrowserKey =
 export type BrowserModifier = "alt" | "control" | "meta" | "shift";
 
 export type BrowserCommand =
+  | { type: "listTabs" }
   | { type: "attach"; tabId: number; allowedOrigins: string[] }
   | { type: "detach" }
   | { type: "stop" }

@@ -517,10 +517,23 @@ export class DesktopComputerMcpBridge {
       },
     );
     mcp.registerTool(
+      "browser_list_tabs",
+      {
+        description:
+          "List the open Chrome http(s) tabs (tabId, url, title, active). Call this BEFORE browser_attach to get the real tabId to attach to — never guess tab ids. If the tab you need isn't open yet, attach to an existing tab and browser_navigate to your URL.",
+        annotations: { readOnlyHint: true, openWorldHint: false },
+      },
+      async () => {
+        const context = this.assertBrowserContext();
+        const result = await this.browserExecute(context, { type: "listTabs" });
+        return this.textResult(browserRecord(result));
+      },
+    );
+    mcp.registerTool(
       "browser_attach",
       {
         description:
-          "Attach this full-Auto task to one Chrome tab and exactly one approved HTTP(S) origin. Do this FIRST for any task that involves a web page or Chrome, before observing or acting — then drive the page with browser_observe / browser_click / browser_type (DOM backend nodes), not the desktop computer_* tools.",
+          "Attach this full-Auto task to one Chrome tab and exactly one approved HTTP(S) origin. Do this FIRST for any task that involves a web page or Chrome, before observing or acting — then drive the page with browser_observe / browser_click / browser_type (DOM backend nodes), not the desktop computer_* tools. Get the tabId from browser_list_tabs; do not guess it.",
         inputSchema: {
           tabId: z.number().int().min(0),
           origin: z.string().max(2_048),

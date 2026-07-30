@@ -201,6 +201,7 @@ function parseCommand(value: unknown): BrowserCommand {
         ],
       };
     }
+    case "listTabs":
     case "detach":
     case "stop":
       return { type };

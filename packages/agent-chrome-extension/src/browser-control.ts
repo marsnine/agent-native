@@ -267,6 +267,8 @@ export class BrowserControlService {
     command: BrowserCommand,
   ): Promise<unknown> {
     switch (command.type) {
+      case "listTabs":
+        return this.listTabs();
       case "attach":
         return this.attach(taskId, command.tabId, command.allowedOrigins);
       case "detach":
@@ -301,6 +303,34 @@ export class BrowserControlService {
           command.y ?? 0,
         );
     }
+  }
+
+  // Discovery: list open http(s) tabs so the agent can attach to the right one
+  // by id instead of guessing tabIds. No debugger/session needed.
+  private async listTabs(): Promise<{
+    tabs: Array<{
+      tabId: number;
+      url: string;
+      title: string;
+      active: boolean;
+    }>;
+  }> {
+    const tabs = await chrome.tabs.query({});
+    const result = tabs
+      .filter(
+        (tab): tab is chrome.tabs.Tab & { id: number; url: string } =>
+          typeof tab.id === "number" &&
+          typeof tab.url === "string" &&
+          /^https?:/i.test(tab.url),
+      )
+      .slice(0, 50)
+      .map((tab) => ({
+        tabId: tab.id,
+        url: tab.url,
+        title: tab.title ?? "",
+        active: tab.active === true,
+      }));
+    return { tabs: result };
   }
 
   private async attach(
