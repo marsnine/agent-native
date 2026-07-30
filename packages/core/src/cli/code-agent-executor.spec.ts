@@ -274,6 +274,9 @@ describe("executeCodeAgentRun", () => {
       // otherwise SIGKILLs them on launch).
       const sandboxIndex = args.indexOf("--sandbox");
       expect(args[sandboxIndex + 1]).toBe("danger-full-access");
+      // Computer use runs at low reasoning effort so the observe→act loop stays
+      // responsive instead of "thinking" for seconds before each click.
+      expect(args).toContain('model_reasoning_effort="low"');
       expect(args.join(" ")).not.toContain("a".repeat(40));
     } finally {
       delete process.env.AGENT_NATIVE_DESKTOP_COMPUTER_MCP_URL;

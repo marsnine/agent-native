@@ -631,6 +631,12 @@ async function executeCodexCliRun(options: {
       "-c",
       `${serverKey}.bearer_token_env_var="AGENT_NATIVE_DESKTOP_COMPUTER_MCP_TOKEN"`,
     );
+    // Computer use is a fast observe→act loop, not a deep coding task. Codex's
+    // default reasoning effort makes each step spend seconds "thinking" before a
+    // click, which dominates the run's latency (many observe cycles × slow model
+    // turns). Drop to low effort so the loop stays responsive; general coding
+    // runs keep their default effort.
+    args.push("-c", 'model_reasoning_effort="low"');
   }
   if (model) args.push("--model", model);
   args.push("-");
