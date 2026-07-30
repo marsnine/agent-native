@@ -278,7 +278,7 @@ export class DesktopComputerMcpBridge {
       "computer_observe",
       {
         description:
-          "Observe the currently focused application as a semantic accessibility snapshot. In Auto mode this also scopes control to exactly that app and web origin.",
+          "Observe the currently focused NATIVE application as a semantic accessibility snapshot. In Auto mode this also scopes control to exactly that app and web origin. For anything happening inside a Chrome web page, do NOT use this — use the browser_* tools (browser_attach → browser_observe), which read the page DOM directly and are faster and more precise than this desktop snapshot.",
         annotations: { readOnlyHint: true, openWorldHint: false },
       },
       async () => {
@@ -520,7 +520,7 @@ export class DesktopComputerMcpBridge {
       "browser_attach",
       {
         description:
-          "Attach this full-Auto task to one Chrome tab and exactly one approved HTTP(S) origin.",
+          "Attach this full-Auto task to one Chrome tab and exactly one approved HTTP(S) origin. Do this FIRST for any task that involves a web page or Chrome, before observing or acting — then drive the page with browser_observe / browser_click / browser_type (DOM backend nodes), not the desktop computer_* tools.",
         inputSchema: {
           tabId: z.number().int().min(0),
           origin: z.string().max(2_048),
@@ -548,7 +548,7 @@ export class DesktopComputerMcpBridge {
       "browser_observe",
       {
         description:
-          "Observe the attached Chrome tab's accessibility tree and bounded screenshot. Full Auto is required until explicit tab approval UX exists.",
+          "Observe the attached Chrome tab's accessibility tree (with backend node ids) and a bounded screenshot. This is the PREFERRED way to read any web page — use it instead of computer_observe for web content; it targets DOM nodes directly (faster, precise). Call browser_attach first. Full Auto is required until explicit tab approval UX exists.",
         inputSchema: {
           maxNodes: z.number().int().min(1).max(2_000).optional(),
         },
