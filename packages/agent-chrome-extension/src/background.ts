@@ -5,6 +5,7 @@ import type { NativeHeartbeat, NativeResponse } from "./protocol";
 const NATIVE_HOST = "com.agent_native.dispatch";
 const RECONNECT_ALARM = "agent-native-browser-native-host-reconnect";
 const HEARTBEAT_INTERVAL_MS = 20_000;
+const RECONNECT_DELAY_MS = 1_500;
 
 const control = new BrowserControlService();
 let nativePort: chrome.runtime.Port | undefined;
@@ -65,6 +66,14 @@ async function handleNativeMessage(message: unknown): Promise<void> {
 }
 
 function scheduleReconnect(): void {
+  // Fast path: right after a disconnect the service worker is still alive (the
+  // native host commonly exits because the desktop app restarted). Retry within
+  // a couple of seconds so queued browser commands reconnect well inside the
+  // bridge's 60s command timeout — otherwise browser_attach/observe time out
+  // while waiting for the 1-minute alarm below, and the agent loops on attach.
+  setTimeout(connectNativeHost, RECONNECT_DELAY_MS);
+  // Backstop: if the worker is terminated before that timeout fires, only an
+  // alarm can wake it (chrome.alarms minimum delay is ~1 minute).
   void chrome.alarms.create(RECONNECT_ALARM, { delayInMinutes: 1 });
 }
 
