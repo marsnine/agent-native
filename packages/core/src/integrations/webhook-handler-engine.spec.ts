@@ -16,6 +16,9 @@ const getOrgA2ASecretMock = vi.hoisted(() => vi.fn());
 const getOwnerActiveApiKeyMock = vi.hoisted(() => vi.fn());
 const getOwnerApiKeyMock = vi.hoisted(() => vi.fn());
 const runAgentLoopMock = vi.hoisted(() => vi.fn());
+// The integration run goes through the resume wrapper. Delegate to the loop
+// mock so every assertion below still reads the options the loop was called
+// with.
 const actionsToEngineToolsMock = vi.hoisted(() => vi.fn());
 const resolveEngineMock = vi.hoisted(() => vi.fn());
 const getConfiguredEngineNameForRequestMock = vi.hoisted(() => vi.fn());
@@ -39,7 +42,10 @@ const completeIntegrationCampaignTaskMock = vi.hoisted(() => vi.fn());
 const heartbeatIntegrationCampaignMock = vi.hoisted(() => vi.fn());
 const waitForA2AIntegrationCampaignMock = vi.hoisted(() => vi.fn());
 const failIntegrationCampaignMock = vi.hoisted(() => vi.fn());
-const hasActiveA2AContinuationsMock = vi.hoisted(() => vi.fn());
+const getA2AContinuationTaskOutcomeMock = vi.hoisted(() => vi.fn());
+const reconcileTerminalA2AParentIfDisabledMock = vi.hoisted(() =>
+  vi.fn(async () => false),
+);
 const dispatchPendingIntegrationTaskMock = vi.hoisted(() => vi.fn());
 const appendDurableContinuationContextMock = vi.hoisted(() => vi.fn());
 const originalNodeEnv = process.env.NODE_ENV;
@@ -72,6 +78,7 @@ vi.mock("../agent/durable-background.js", () => ({
 
 vi.mock("../agent/run-loop-with-resume.js", () => ({
   appendDurableContinuationContext: appendDurableContinuationContextMock,
+  runAgentLoopDirectWithSoftTimeout: (opts: unknown) => runAgentLoopMock(opts),
 }));
 
 vi.mock("./integration-campaigns-store.js", () => ({
@@ -87,7 +94,12 @@ vi.mock("./integration-campaigns-store.js", () => ({
 }));
 
 vi.mock("./a2a-continuations-store.js", () => ({
-  hasActiveA2AContinuationsForIntegrationTask: hasActiveA2AContinuationsMock,
+  getA2AContinuationTaskOutcome: getA2AContinuationTaskOutcomeMock,
+}));
+
+vi.mock("./a2a-continuation-processor.js", () => ({
+  reconcileTerminalA2AParentIfDisabled:
+    reconcileTerminalA2AParentIfDisabledMock,
 }));
 
 vi.mock("./integration-durable-dispatch.js", () => ({
@@ -307,7 +319,7 @@ describe("integration webhook handler engine resolution", () => {
     heartbeatIntegrationCampaignMock.mockResolvedValue(true);
     waitForA2AIntegrationCampaignMock.mockResolvedValue(true);
     failIntegrationCampaignMock.mockResolvedValue(true);
-    hasActiveA2AContinuationsMock.mockResolvedValue(false);
+    getA2AContinuationTaskOutcomeMock.mockResolvedValue("terminal-delivered");
     dispatchPendingIntegrationTaskMock.mockResolvedValue(
       "background-acknowledged",
     );
@@ -438,12 +450,21 @@ describe("integration webhook handler engine resolution", () => {
         principalType: "service",
       });
 
+      // objectContaining, not an exact match: `runOptions` is handed to
+      // startRun by reference and deliberately mutated afterwards (model and
+      // engineName are filled in inside the run callback so run-manager's
+      // terminal event can read them in its `.finally()`), and it also carries
+      // attemptCount. This assertion is about which soft-timeout ceiling was
+      // chosen, so it pins those two fields and stays agnostic to the rest.
       expect(startRunMock).toHaveBeenLastCalledWith(
         expect.any(String),
         expect.any(String),
         expect.any(Function),
         expect.any(Function),
-        { useHostedSoftTimeoutDefault: true, backgroundFunction: false },
+        expect.objectContaining({
+          useHostedSoftTimeoutDefault: true,
+          backgroundFunction: false,
+        }),
       );
       expect(settleIntegrationUsageBudgetMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -477,7 +498,10 @@ describe("integration webhook handler engine resolution", () => {
         expect.any(String),
         expect.any(Function),
         expect.any(Function),
-        { useHostedSoftTimeoutDefault: true, backgroundFunction: true },
+        expect.objectContaining({
+          useHostedSoftTimeoutDefault: true,
+          backgroundFunction: true,
+        }),
       );
     },
   );
@@ -508,6 +532,34 @@ describe("integration webhook handler engine resolution", () => {
       const text = sendResponse.mock.calls.at(-1)?.[0]?.text ?? "";
       expect(text).toContain("ran out of time");
       expect(text).not.toContain("finished without a visible answer");
+    },
+  );
+
+  it(
+    "does not report a run that resumed past a boundary and finished as out of time",
+    { timeout: 15_000 },
+    async () => {
+      const { processIntegrationTask } = await import("./webhook-handler.js");
+      const sendResponse = vi.fn(async () => ({
+        status: "delivered" as const,
+      }));
+      runAgentLoopMock.mockImplementationOnce(async ({ send }) => {
+        send({ type: "auto_continue", reason: "network_interrupted" });
+        send({ type: "done" });
+      });
+
+      await processIntegrationTask(pendingTask(), {
+        adapter: createAdapter(sendResponse),
+        systemPrompt: "system",
+        actions: {},
+        apiKey: "test-key",
+        ownerEmail: "dispatch+qa@integration.local",
+        orgId: "org-qa",
+        principalType: "service",
+      });
+
+      const text = sendResponse.mock.calls.at(-1)?.[0]?.text ?? "";
+      expect(text).not.toContain("ran out of time");
     },
   );
 
@@ -2018,7 +2070,7 @@ describe("integration webhook handler engine resolution", () => {
     );
   });
 
-  it("finishes a waiting campaign only after downstream A2A is terminal", async () => {
+  it("does not finish a waiting campaign merely because no active A2A continuation remains", async () => {
     const { processIntegrationTask } = await import("./webhook-handler.js");
     createIntegrationCampaignMock.mockResolvedValueOnce({
       id: "campaign-qa",
@@ -2037,7 +2089,9 @@ describe("integration webhook handler engine resolution", () => {
         checkpoint: JSON.stringify({ waitingForA2A: true }),
       },
     });
-    hasActiveA2AContinuationsMock.mockResolvedValueOnce(false);
+    getA2AContinuationTaskOutcomeMock.mockResolvedValueOnce(
+      "terminal-without-delivery",
+    );
 
     const result = await processIntegrationTask(
       pendingTask({ id: "task-a2a" }),
@@ -2052,9 +2106,9 @@ describe("integration webhook handler engine resolution", () => {
       { enabled: true, continuationInvocation: true },
     );
 
-    expect(result).toEqual({ status: "completed" });
-    expect(hasActiveA2AContinuationsMock).toHaveBeenCalledWith("task-a2a");
-    expect(completeIntegrationCampaignTaskMock).toHaveBeenCalled();
+    expect(result).toEqual({ status: "campaign-pending" });
+    expect(getA2AContinuationTaskOutcomeMock).toHaveBeenCalledWith("task-a2a");
+    expect(completeIntegrationCampaignTaskMock).not.toHaveBeenCalled();
     expect(startRunMock).not.toHaveBeenCalled();
   });
 
@@ -2478,6 +2532,7 @@ describe("integration webhook handler engine resolution", () => {
       "I will relay from the Analytics agent when the result is ready.",
       "The Slides agent is working on your *Launch Readiness Snapshot* deck (title, risks, next steps). The result will be posted here in this thread as soon as it's ready - hang tight!",
       "The Design agent is working on your *Launch Readiness Status Card* - it'll post the artifact URL directly here in this thread as soon as it's ready. Hang tight! :art:",
+      "The Design Ask request has been sent to Content, which will create the record and post the verified link + Content ID directly to this thread. No further action needed from me here.",
     ];
 
     for (const [index, text] of deferrals.entries()) {

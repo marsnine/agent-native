@@ -6,14 +6,17 @@ import {
   type ChatThreadSummary,
 } from "@agent-native/core/client/agent-chat";
 import { useCodeMode } from "@agent-native/core/client/agent-chat";
-import { agentNativePath, appPath } from "@agent-native/core/client/api-path";
+import { appPath } from "@agent-native/core/client/api-path";
 import { PromptComposer } from "@agent-native/core/client/composer";
 import { DevDatabaseLink } from "@agent-native/core/client/db-admin";
 import { useSession } from "@agent-native/core/client/hooks";
-import { LanguagePicker, useT } from "@agent-native/core/client/i18n";
+import { useT } from "@agent-native/core/client/i18n";
 import { openCommandMenu } from "@agent-native/core/client/navigation";
 import { OrgSwitcher } from "@agent-native/core/client/org";
-import { FeedbackButton } from "@agent-native/core/client/ui";
+import {
+  buildSignInReturnHref,
+  FeedbackButton,
+} from "@agent-native/core/client/ui";
 import { SidebarFooterActions } from "@agent-native/toolkit/app-shell";
 import {
   ChatHistoryRail,
@@ -288,15 +291,13 @@ function PlanChatsSection({
 }
 
 function signInForPlanCreate() {
-  window.location.href = `${agentNativePath(
-    "/_agent-native/sign-in",
-  )}?return=${encodeURIComponent("/plans?create=1")}`;
+  window.location.href = buildSignInReturnHref({
+    returnTo: "/plans?create=1",
+  });
 }
 
 function signInWithReturnPath(returnPath: string) {
-  window.location.href = `${agentNativePath(
-    "/_agent-native/sign-in",
-  )}?return=${encodeURIComponent(returnPath || "/")}`;
+  window.location.href = buildSignInReturnHref({ returnTo: returnPath });
 }
 
 function PlansSidebarSection({ collapsed }: { collapsed: boolean }) {
@@ -583,9 +584,6 @@ export function Sidebar({
       </TooltipContent>
     </Tooltip>
   );
-  const translateButton = (
-    <LanguagePicker variant="ghost-icon" label={t("settings.languageLabel")} />
-  );
   const feedbackButton = (
     <FeedbackButton
       variant={collapsed ? "icon" : "sidebar"}
@@ -608,30 +606,45 @@ export function Sidebar({
           collapsed ? "justify-center px-0" : "gap-2 px-3",
         )}
       >
-        <div
+        <button
+          type="button"
+          onClick={() => onCollapsedChange?.(!collapsed)}
           className={cn(
-            "flex min-w-0 items-center gap-2",
-            collapsed ? "justify-center" : "flex-1",
+            "flex min-w-0 items-center gap-2 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            collapsed ? "justify-center" : "flex-1 text-start",
           )}
+          aria-label={
+            collapsible
+              ? collapsed
+                ? t("sidebar.expandSidebar")
+                : t("sidebar.collapseSidebar")
+              : undefined
+          }
+          disabled={!collapsible || !onCollapsedChange}
+          data-sidebar-brand-toggle
         >
           <img
             src={appPath("/agent-native-icon-light.svg")}
             alt=""
             aria-hidden="true"
-            className="block h-4 w-auto max-w-7 shrink-0 dark:hidden"
+            width={28}
+            height={16}
+            className="block h-4 w-7 shrink-0 object-contain object-center dark:hidden"
           />
           <img
             src={appPath("/agent-native-icon-dark.svg")}
             alt=""
             aria-hidden="true"
-            className="hidden h-4 w-auto max-w-7 shrink-0 dark:block"
+            width={28}
+            height={16}
+            className="hidden h-4 w-7 shrink-0 object-contain object-center dark:block"
           />
           {!collapsed && (
             <span className="truncate text-sm font-semibold tracking-tight">
               {APP_TITLE}
             </span>
           )}
-        </div>
+        </button>
         {!collapsed && <BrandingCustomizePopover />}
       </div>
 
@@ -668,8 +681,8 @@ export function Sidebar({
           return (
             <div key={item.href}>
               {link}
-              {item.href === "/" && isActive ? (
-                <PlanChatsSection collapsed={collapsed} open />
+              {item.href === "/" ? (
+                <PlanChatsSection collapsed={collapsed} open={isActive} />
               ) : null}
               {item.href === "/plans" && isActive ? (
                 <PlansSidebarSection collapsed={collapsed} />
@@ -745,7 +758,6 @@ export function Sidebar({
       <SidebarFooterActions
         collapsed={collapsed}
         feedback={feedbackButton}
-        translate={translateButton}
         search={searchButton}
         collapse={collapseButton}
       />

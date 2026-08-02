@@ -1,5 +1,7 @@
 import { getDbExec } from "../db/client.js";
-import { getUserSetting, putUserSetting } from "../settings/user-settings.js";
+import { getUserSetting } from "../settings/user-settings.js";
+import { setActiveOrgId } from "./active-org.js";
+import { invalidateRequestMemberOrgIds } from "./request-org-cache.js";
 
 const nanoid = (): string =>
   globalThis.crypto?.randomUUID?.().replace(/-/g, "") ??
@@ -86,6 +88,7 @@ export async function autoJoinDomainMatchingOrgs(
         args: [nanoid(), m.orgId, email, Date.now()],
       });
       joined.push({ orgId: m.orgId });
+      invalidateRequestMemberOrgIds();
     } catch {
       // Race with a parallel join (e.g. user accepted an invite to the
       // same org milliseconds earlier). The unique constraint keeps the
@@ -103,7 +106,11 @@ export async function autoJoinDomainMatchingOrgs(
       const hasActive = Boolean(existing?.orgId);
       if (options.activateJoinedOrg === "always" || !hasActive) {
         activeOrgId = joined[0].orgId;
-        await putUserSetting(email, "active-org-id", { orgId: activeOrgId });
+        await setActiveOrgId(
+          email,
+          activeOrgId,
+          "auto-joined domain-matched org",
+        );
       }
     } catch {
       // settings table missing — not fatal.

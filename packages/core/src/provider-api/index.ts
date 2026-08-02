@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { WorkspaceConnectionTemplateUse } from "../connections/catalog.js";
 import {
+  describeCredentialScopeGap,
   resolveCredential,
   type CredentialContext,
 } from "../credentials/index.js";
@@ -3976,10 +3977,14 @@ async function resolveAnyCredential(options: {
     const credential = await resolveOptionalCredential({ ...options, key });
     if (credential?.value) return credential;
   }
+  const scopeGap = await describeCredentialScopeGap(
+    options.keys,
+    options.ctx,
+  ).catch(() => null);
   throw new Error(
     `${options.provider} credential not configured. Tried: ${options.keys.join(
       ", ",
-    )}`,
+    )}${scopeGap ? `. ${scopeGap}` : ""}`,
   );
 }
 
@@ -3992,8 +3997,14 @@ async function resolveRequiredCredential(options: {
   connectionId?: string | null;
 }): Promise<ProviderApiResolvedCredential> {
   const credential = await resolveOptionalCredential(options);
-  if (!credential?.value) throw new Error(`${options.key} not configured`);
-  return credential;
+  if (credential?.value) return credential;
+  const scopeGap = await describeCredentialScopeGap([options.key], options.ctx)
+    // coercion-ok: only enriches an error we throw either way — losing the scope
+    // hint still surfaces the real "not configured" failure, never a success.
+    .catch(() => null);
+  throw new Error(
+    `${options.key} not configured${scopeGap ? `. ${scopeGap}` : ""}`,
+  );
 }
 
 async function resolveOptionalCredential(options: {

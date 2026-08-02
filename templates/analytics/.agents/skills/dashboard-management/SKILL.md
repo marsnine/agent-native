@@ -120,12 +120,86 @@ pnpm action navigate --view=adhoc --dashboardId=weekly-metrics
 
 The save path dry-runs BigQuery panels before persisting. If validation returns a provider error, fix the query and retry. Never work around validation by writing directly to a table.
 
+## Dual-Axis Charts
+
+`line`, `area`, and `bar` panels can plot series against two y-axes. Reach for
+this whenever series share an x-axis but not a unit — a count next to a rate, or
+revenue next to a conversion percent. On a single axis the smaller series
+flattens into the baseline and reads as "no data."
+
+```json
+{
+  "id": "signups-vs-conversion",
+  "title": "Signups vs conversion rate",
+  "source": "first-party",
+  "chartType": "line",
+  "width": 1,
+  "sql": "SELECT day, signups, conversion_rate FROM ...",
+  "config": {
+    "timeScope": "dashboard",
+    "xKey": "day",
+    "yKeys": ["signups", "conversion_rate"],
+    "yFormatter": "number",
+    "rightYKeys": ["conversion_rate"],
+    "rightYFormatter": "percent"
+  }
+}
+```
+
+- `rightYKeys` names series from `yKeys`; everything unnamed stays on the left.
+- `rightYFormatter` defaults to `yFormatter` when omitted.
+- Each axis is labelled with its series names (up to two per side), and tooltip
+  values use the formatter of the axis the series belongs to.
+- At least one series must remain on the left. If `rightYKeys` names every
+  series, or names a column the query never returned, the panel falls back to a
+  single axis and shows a config warning rather than dropping the series.
+- Scheduled email reports render the same two scales, so a dual-axis panel is
+  safe to put on a subscribed dashboard.
+
+## Reusable Native Dashboard Patterns
+
+The recent extension-backed dashboards in Builder Analytics cluster into a few
+repeatable compositions. Prefer these native panels, with a real SQL or Data
+Program result behind each one, when creating a replacement or a new dashboard:
+
+| Pattern | Native composition |
+| --- | --- |
+| Customer ROI / value realization | `metric` KPI cards, `line` or `area` trends, `table` detail, and `callout` or `section` panels for the business narrative |
+| Account engagement / outreach | `metric` coverage and adoption cards, a daily `line` trend, `heatmap` or `table` segmentation, and `callout` alerts |
+| GTM pipeline / cross-sell | `funnel` for ordered stages, `metric` totals, `bar` or `line` trends, and a `table` for account-level follow-up |
+| Win/loss analysis | `section` groups with `metric`, `table`, `bar`, `callout`, and trend panels; use a Data Program for provider joins and evidence rows |
+
+Funnel panels use `config.xKey` for the stage label and `config.yKey` for a
+non-negative count or value. The renderer preserves the SQL row order, shows
+each stage's share of the first stage, and shows the change from the previous
+stage. Keep the intended stage order in SQL with `ORDER BY`.
+
+When a dashboard is being migrated from an extension, create a new v2 copy,
+bind its panels to the real provider schema or Data Programs, and compare it
+with the original before retiring the extension-backed version. Do not invent
+customer-specific SQL, provider joins, cached rows, or extension ids in a
+catalog template. Existing dashboards remain readable while the native
+replacement is validated. Bespoke interaction flows, arbitrary layouts, and
+visualizations outside these contracts may remain Custom Blocks.
+
+The source tree ships four provider-free v2 manifests in
+`server/lib/native-v2-dashboards.ts`: Customer ROI, Account Engagement,
+Cross-sell, and Win / Loss. They intentionally contain no customer names,
+provider ids, SQL, cached rows, or guessed joins. After deployment, an
+organization owner or admin provisions them with `ensure-native-v2-dashboards`
+by supplying one real Data Program per binding key. The action validates the
+stored program output contract, shares the programs with the organization,
+creates deterministic `native-*-v2-*` dashboard copies, and preserves the
+extension-backed originals and any existing v2 edits. Do not add these to the
+root demo bootstrap or silently auto-bind them to guessed provider schemas.
+
 ## When To Use An Extension Instead
 
 Native Analytics dashboards are JSON configs rendered by the built-in dashboard
 components. Use native dashboard actions only when the request fits that model:
 standard panels, supported chart types, filters, variables, sections, and grid
-layout.
+layout. Dual-axis charts are part of that model — build one with
+`config.rightYKeys`, never as an extension.
 
 If the user asks for a dashboard or analytical surface that needs bespoke UI or
 code beyond the dashboard JSON/component model, create an extension and embed it
@@ -413,6 +487,9 @@ type PanelConfig = Record<string, unknown> & {
   // Use "dashboard" for AI-generated first-party panels by default.
   timeScope?: PanelTimeScope;
   // Fixed bar width in pixels for bar charts.
+  // Series to plot against a second, right-hand y-axis. See "Dual-Axis Charts".
+  rightYKeys?: string[];
+  rightYFormatter?: "number" | "currency" | "percent";
 };
 
 type PanelPatch = {
@@ -434,6 +511,7 @@ type PanelPatch = {
     | "table"
     | "pie"
     | "section"
+    | "funnel"
     | "heatmap"
     | "callout"
     | "extension";

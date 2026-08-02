@@ -128,6 +128,8 @@ const NATIVE_CAPTURE_FPS: u32 = 24;
 #[cfg(target_os = "macos")]
 mod custom_capture;
 #[cfg(target_os = "macos")]
+pub(crate) use custom_capture::extract_mono_audio;
+#[cfg(target_os = "macos")]
 use custom_capture::{
     prepare_clip_sink, start_custom_screencapturekit_backend_at, ClosedSegmentFile,
     CustomCaptureResume, CustomScreenCaptureWriter, PreparedClipSink, SegmentFence,
@@ -3995,7 +3997,7 @@ const SCK_FINALIZE_TIMEOUT: Duration = Duration::from_secs(10);
 const CUSTOM_SCK_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[cfg(target_os = "macos")]
-fn run_bounded_capture_stop<F>(stop: F, timeout: Duration) -> Result<(), String>
+pub(crate) fn run_bounded_capture_stop<F>(stop: F, timeout: Duration) -> Result<(), String>
 where
     F: FnOnce() -> Result<(), String> + Send + 'static,
 {
