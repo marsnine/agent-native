@@ -56,6 +56,8 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   "openai/gpt-5.6-luna": 1_050_000,
   "google/gemini-2.5-flash": 1_048_576,
   "z-ai/glm-5.2": 1_048_576,
+  "deepseek/deepseek-v4-flash-0731": 1_310_720,
+  "deepseek/deepseek-v4-pro-0813": 1_048_576,
 
   // ── AI-SDK native OpenAI IDs ──────────────────────────────────────────────
   "gpt-5.6-sol": 1_050_000,
@@ -162,6 +164,10 @@ const MODEL_MAX_OUTPUT_TOKENS: Record<string, number> = {
   "openai/gpt-5.6-sol": 40_000,
   "openai/gpt-5.6-terra": 40_000,
   "openai/gpt-5.6-luna": 128_000,
+  "deepseek/deepseek-v4-flash-0731": 384_000,
+  // OpenRouter did not publish a max_completion_tokens for pro-0813; use a
+  // conservative ceiling until a documented value is available.
+  "deepseek/deepseek-v4-pro-0813": 128_000,
 
   // ── AI-SDK native OpenAI IDs ──────────────────────────────────────────────
   "gpt-5.6-sol": 40_000,
@@ -306,6 +312,9 @@ export const AGENT_MODEL_CONFIG = {
         // Current stable Gemini on OpenRouter (2.5 Flash is GA)
         "google/gemini-2.5-flash",
         "z-ai/glm-5.2",
+        // DeepSeek V4 on OpenRouter (flash = fast/cheap, pro = stronger).
+        "deepseek/deepseek-v4-flash-0731",
+        "deepseek/deepseek-v4-pro-0813",
       ],
     },
     google: {

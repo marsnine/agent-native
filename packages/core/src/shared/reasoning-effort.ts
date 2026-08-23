@@ -68,6 +68,9 @@ export function getReasoningEffortOptionsForModel(
   if (isGeminiReasoningModel(model)) {
     return VISIBLE_STANDARD_EFFORTS;
   }
+  if (isDeepSeekReasoningModel(model)) {
+    return VISIBLE_STANDARD_EFFORTS;
+  }
   return [];
 }
 
@@ -225,6 +228,17 @@ function supportsClaudeXHigh(model: string) {
 
 function isGeminiReasoningModel(model: string) {
   return /^gemini-/.test(model.toLowerCase().replace(/^google\//, ""));
+}
+
+function isDeepSeekReasoningModel(model: string) {
+  const id = model.toLowerCase().replace(/^deepseek\//, "");
+  // DeepSeek V4 (flash/pro) and the R-series reasoner line expose reasoning
+  // effort through OpenRouter's unified reasoning parameter.
+  return (
+    id.startsWith("deepseek-v4") ||
+    id.startsWith("deepseek-r") ||
+    id.includes("reasoner")
+  );
 }
 
 /**
