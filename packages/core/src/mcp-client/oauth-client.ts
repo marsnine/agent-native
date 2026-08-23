@@ -372,6 +372,13 @@ export class McpOAuthClientProvider implements OAuthClientProvider {
   clientInformation(
     context?: OAuthClientInformationContext,
   ): StoredOAuthClientInformation | undefined {
+    if (!this.clientInfo) return undefined;
+    // A pre-configured managed client (e.g. HUBSPOT_MCP_CLIENT_ID/SECRET) is
+    // resolved per-server and carries no issuer yet. Return it for whatever
+    // issuer the server advertises so the SDK uses it instead of attempting
+    // dynamic client registration, which servers like HubSpot do not support.
+    // Once a client is bound to a specific issuer it must still match.
+    if (!this.clientInfo.issuer) return this.clientInfo;
     return isBoundToIssuer(this.clientInfo, context)
       ? this.clientInfo
       : undefined;

@@ -232,7 +232,11 @@ export async function handleWorkspaceProviderOAuthStart(
         {
           httpOnly: true,
           secure: redirectUri.startsWith("https://"),
-          sameSite: "lax",
+          // OAuth flow cookie must survive the cross-site return redirect from
+          // the provider (e.g. app.hubspot.com -> our callback). Lax is dropped
+          // on that navigation, so use None+Secure over https like the session
+          // cookies; fall back to Lax on plain-http local dev.
+          sameSite: redirectUri.startsWith("https://") ? "none" : "lax",
           path: "/",
           maxAge: FLOW_TTL_SECONDS,
         },
@@ -252,7 +256,16 @@ export async function handleWorkspaceProviderOAuthStart(
             }
           : {}),
       });
-      return Response.redirect(authorizationUrl, 302);
+      // setCookie(event, ...) only STAGES the Set-Cookie on the event; a brand
+      // new Response (e.g. Response.redirect) drops those staged headers, so the
+      // flow cookie never reaches the browser and the callback sees no cookie.
+      // Carry the staged cookies onto the redirect explicitly (the MCP OAuth
+      // flow does the same via redirectWithStagedCookies).
+      const redirectHeaders = new Headers({ Location: authorizationUrl });
+      for (const cookie of event.res?.headers?.getSetCookie?.() ?? []) {
+        redirectHeaders.append("set-cookie", cookie);
+      }
+      return new Response("", { status: 302, headers: redirectHeaders });
     },
   );
 }
@@ -454,7 +467,11 @@ export function buildWorkspaceProviderAuthorizationUrl(input: {
   url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("state", input.state);
-  if (input.provider.id === "figma" || input.provider.id === "sentry") {
+  if (
+    input.provider.id === "figma" ||
+    input.provider.id === "sentry" ||
+    input.provider.id === "hubspot"
+  ) {
     url.searchParams.set("code_challenge", input.challenge);
     url.searchParams.set("code_challenge_method", "S256");
   }
@@ -534,6 +551,7 @@ export async function exchangeWorkspaceProviderOAuthCode(input: {
           client_secret: input.clientSecret,
           code: input.code,
           redirect_uri: input.redirectUri,
+          code_verifier: input.verifier,
         }),
       },
       input.provider.label,
