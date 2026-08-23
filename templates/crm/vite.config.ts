@@ -8,6 +8,9 @@ const agentNativePlugins = agentNative as unknown as (
 ) => any[];
 
 export default defineConfig({
+  server: {
+    allowedHosts: ["hellos-macbook-pro.tail6d8e8c.ts.net"],
+  },
   plugins: [
     ...reactRouterPlugins(),
     ...agentNativePlugins({ ssrStubs: ["shiki"] }),
